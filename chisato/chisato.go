@@ -2,6 +2,7 @@ package chisato
 
 import (
 	"encoding/json"
+	"path"
 	"strconv"
 	"time"
 
@@ -26,6 +27,8 @@ type ChisatoTestcase struct {
 type ChisatoTestcaseResult struct {
 	Result string `json:"result"`
 	Pass   bool   `json:"pass"`
+	Mem    int64  `json:"mem"`
+	Time   int64  `json:"time"`
 }
 
 type ChisatoRequestTesting struct {
@@ -66,6 +69,7 @@ type ChisatoTestingServer struct {
 }
 
 var global Chisato
+var docker_work_dir = "/home/ctf/"
 
 func (root Chisato) Run() {
 	server := znet.NewServer()
@@ -91,13 +95,15 @@ func (router *ChisatoTestingServer) Handle(req ziface.IRequest) {
 	req.GetConnection().SendBuffMsg(MESSAGEID_TESTING, text)
 }
 
-func RunTesting(testcase []ChisatoTestcase, callback func(string, string) (string, bool)) []ChisatoTestcaseResult {
+func RunTesting(testcase []ChisatoTestcase, callback func(string, string) (uint64, string, bool)) []ChisatoTestcaseResult {
 	var testcase_result []ChisatoTestcaseResult
+
 	for _, testcase := range testcase {
-		result, pass := callback(testcase.Stdin, testcase.Stdout)
+		execute_time, result, pass := callback(testcase.Stdin, testcase.Stdout)
 		testcase_result = append(testcase_result, ChisatoTestcaseResult{
 			Result: result,
 			Pass:   pass,
+			Time:   int64(execute_time),
 		})
 	}
 	return testcase_result
@@ -122,13 +128,20 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 		if err != nil {
 			return failed(err.Error())
 		}
+		//copy file to docker
+		docker_path := docker_work_dir + exec_path
+		docker_path = path.Clean(docker_path)
+		err = DockerCopyFileFromLocal(exec_path, docker_path)
+		if err != nil {
+			return failed(err.Error())
+		}
 		//run
-		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (string, bool) {
-			result, err := RunC(exec_path, stdin)
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, string, bool) {
+			execute_time, result, err := RunC(docker_path, stdin)
 			if err != nil {
-				return err.Error(), false
+				return 0, err.Error(), false
 			}
-			return result, result == stdout
+			return execute_time, result, result == stdout
 		})
 	case "cpp":
 		//compile
@@ -136,39 +149,61 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 		if err != nil {
 			return failed(err.Error())
 		}
+		//copy file to docker
+		docker_path := docker_work_dir + exec_path
+		docker_path = path.Clean(docker_path)
+		err = DockerCopyFileFromLocal(exec_path, docker_path)
+		if err != nil {
+			return failed(err.Error())
+		}
 		//run
-		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (string, bool) {
-			result, err := RunCpp(exec_path, stdin)
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, string, bool) {
+			execute_time, result, err := RunCpp(docker_path, stdin)
 			if err != nil {
-				return err.Error(), false
+				return 0, err.Error(), false
 			}
-			return result, result == stdout
+			return execute_time, result, result == stdout
 		})
 	case "go":
 	case "python2":
-		exec_path, err = CompilePython2(tmp_path, request.Code)
+		exec_path, err := CompilePython2(tmp_path, request.Code)
+		if err != nil {
+			return failed(err.Error())
+		}
+		//copy file to docker
+		docker_path := docker_work_dir + exec_path
+		docker_path = path.Clean(docker_path)
+		err = DockerCopyFileFromLocal(exec_path, docker_path)
 		if err != nil {
 			return failed(err.Error())
 		}
 		//run
-		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (string, bool) {
-			result, err := RunPython2(exec_path, stdin)
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, string, bool) {
+			execute_time, result, err := RunPython2(docker_path, stdin)
 			if err != nil {
-				return err.Error(), false
+				return 0, err.Error(), false
 			}
-			return result, result == stdout
+			return execute_time, result, result == stdout
 		})
 	case "python3":
-		exec_path, err = CompilePython3(tmp_path, request.Code)
+		exec_path, err := CompilePython3(tmp_path, request.Code)
 		if err != nil {
 			return failed(err.Error())
 		}
-		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (string, bool) {
-			result, err := RunPython3(exec_path, stdin)
+		//copy file to docker
+		docker_path := docker_work_dir + exec_path
+		docker_path = path.Clean(docker_path)
+		err = DockerCopyFileFromLocal(exec_path, docker_path)
+		if err != nil {
+			return failed(err.Error())
+		}
+		//run
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, string, bool) {
+			execute_time, result, err := RunPython3(docker_path, stdin)
 			if err != nil {
-				return err.Error(), false
+				return 0, err.Error(), false
 			}
-			return result, result == stdout
+			return execute_time, result, result == stdout
 		})
 	case "java":
 	case "node":
