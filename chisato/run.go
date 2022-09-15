@@ -9,11 +9,11 @@ var work_path string = "/home/ctf/"
 
 func parseResult(result string) (uint64, uint64, string, error) {
 	//result has a header total 8*4 bytes
-	if len(result) <= 20 {
+	if len(result) <= 0x20 {
 		return 0, 0, "", errors.New("runner master returns a error format output")
 	}
 	//read header
-	header_bytes := []byte(result[:20])
+	header_bytes := []byte(result[:0x20])
 	execute_time := binary.LittleEndian.Uint64(header_bytes[0:8])
 	execute_memory := binary.LittleEndian.Uint64(header_bytes[8:16])
 	body_length := binary.LittleEndian.Uint64(header_bytes[16:24])
