@@ -95,15 +95,16 @@ func (router *ChisatoTestingServer) Handle(req ziface.IRequest) {
 	req.GetConnection().SendBuffMsg(MESSAGEID_TESTING, text)
 }
 
-func RunTesting(testcase []ChisatoTestcase, callback func(string, string) (uint64, string, bool)) []ChisatoTestcaseResult {
+func RunTesting(testcase []ChisatoTestcase, callback func(string, string) (uint64, uint64, string, bool)) []ChisatoTestcaseResult {
 	var testcase_result []ChisatoTestcaseResult
 
 	for _, testcase := range testcase {
-		execute_time, result, pass := callback(testcase.Stdin, testcase.Stdout)
+		execute_time, execute_memory, result, pass := callback(testcase.Stdin, testcase.Stdout)
 		testcase_result = append(testcase_result, ChisatoTestcaseResult{
 			Result: result,
 			Pass:   pass,
 			Time:   int64(execute_time),
+			Mem:    int64(execute_memory),
 		})
 	}
 	return testcase_result
@@ -136,12 +137,12 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 			return failed(err.Error())
 		}
 		//run
-		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, string, bool) {
-			execute_time, result, err := RunC(docker_path, stdin)
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, uint64, string, bool) {
+			execute_time, execute_memory, result, err := RunC(docker_path, stdin)
 			if err != nil {
-				return 0, err.Error(), false
+				return 0, 0, err.Error(), false
 			}
-			return execute_time, result, result == stdout
+			return execute_time, execute_memory, result, result == stdout
 		})
 	case "cpp":
 		//compile
@@ -157,12 +158,12 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 			return failed(err.Error())
 		}
 		//run
-		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, string, bool) {
-			execute_time, result, err := RunCpp(docker_path, stdin)
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, uint64, string, bool) {
+			execute_time, execute_memory, result, err := RunCpp(docker_path, stdin)
 			if err != nil {
-				return 0, err.Error(), false
+				return 0, 0, err.Error(), false
 			}
-			return execute_time, result, result == stdout
+			return execute_time, execute_memory, result, result == stdout
 		})
 	case "go":
 	case "python2":
@@ -178,12 +179,12 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 			return failed(err.Error())
 		}
 		//run
-		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, string, bool) {
-			execute_time, result, err := RunPython2(docker_path, stdin)
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, uint64, string, bool) {
+			execute_time, execute_memory, result, err := RunPython2(docker_path, stdin)
 			if err != nil {
-				return 0, err.Error(), false
+				return 0, 0, err.Error(), false
 			}
-			return execute_time, result, result == stdout
+			return execute_time, execute_memory, result, result == stdout
 		})
 	case "python3":
 		exec_path, err := CompilePython3(tmp_path, request.Code)
@@ -198,12 +199,12 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 			return failed(err.Error())
 		}
 		//run
-		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, string, bool) {
-			execute_time, result, err := RunPython3(docker_path, stdin)
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, uint64, string, bool) {
+			execute_time, execute_memory, result, err := RunPython3(docker_path, stdin)
 			if err != nil {
-				return 0, err.Error(), false
+				return 0, 0, err.Error(), false
 			}
-			return execute_time, result, result == stdout
+			return execute_time, execute_memory, result, result == stdout
 		})
 	case "java":
 	case "node":

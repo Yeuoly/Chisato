@@ -49,11 +49,21 @@ func init() {
 	if chisato_container_id == "" {
 		//create container
 		fmt.Println("creating chisato container...")
+		// resp, err := cli.ContainerCreate(context.Background(), &container.Config{
+		// 	Image: "yeuoly/chisato:v1",
+		// 	Tty:   true,
+		// 	Cmd:   []string{"/bin/bash"},
+		// }, nil, nil, nil, "chisato")
+
+		//how to add --cap-add=SYS_PTRACE?
 		resp, err := cli.ContainerCreate(context.Background(), &container.Config{
 			Image: "yeuoly/chisato:v1",
 			Tty:   true,
 			Cmd:   []string{"/bin/bash"},
-		}, nil, nil, nil, "chisato")
+		}, &container.HostConfig{
+			CapAdd: []string{"SYS_PTRACE"},
+		}, nil, nil, "chisato")
+
 		if err != nil {
 			panic(err)
 		}
