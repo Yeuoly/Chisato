@@ -114,8 +114,7 @@ int main(int argc, char **args) {
     int pid = fork();
     if (pid == 0) {
         //strict aliasing, do not allow unlimited cycles
-        alarm(60);
-
+        alarm(MAX_TIME);
         //child process
         //close unused pipe
         close(pipe_stdout_read);
@@ -150,6 +149,18 @@ int main(int argc, char **args) {
             if (WIFEXITED(status)) {
                 break;
             }
+            //check signal for alarm while dead loop
+            if (WIFSTOPPED(status)) {
+                //get stop signal
+                int sig = WSTOPSIG(status);
+                if (sig == SIGALRM) {
+                    //kill child process
+                    appendError("Time Limit Exceeded ##", 21);
+                    kill(pid, SIGKILL);
+                    break;
+                }
+            }
+
             if (WIFSIGNALED(status)) {
                 int sig = WTERMSIG(status);
                 if (sig == SIGALRM) {
