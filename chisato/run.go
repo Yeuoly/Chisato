@@ -28,6 +28,11 @@ func parseResult(result string) (uint64, uint64, string, error) {
 		return execute_time, execute_memory, "", errors.New(body)
 	}
 
+	//tirm line break
+	for len(body) > 0 && (body[len(body)-1] == '\n' || body[len(body)-1] == '\r') {
+		body = body[:len(body)-1]
+	}
+
 	return execute_time, execute_memory, body, nil
 }
 
