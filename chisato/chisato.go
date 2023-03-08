@@ -154,7 +154,7 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 			}
 			return execute_time, execute_memory, result, result == stdout
 		})
-	case "cpp":
+	case "c++":
 		//compile
 		exec_path, err = CompileCpp(tmp_path, request.Code)
 		if err != nil {
