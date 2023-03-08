@@ -12,6 +12,7 @@
 #include <errno.h>
 #include <signal.h>
 #include <sys/ptrace.h>
+#include <pthread.h>
 
 #define ull unsigned long long int
 #define cptr char *
@@ -65,8 +66,8 @@ ull get_process_memory(pid_t pid) {
     char buf[4096] = { 0 };
     read(fd, buf, sizeof(buf));
     close(fd);
-    char *p = strstr(buf, "VmData:");
-    p += strlen("VmData:");
+    char *p = strstr(buf, "VmRSS:");
+    p += strlen("VmRSS:");
     while (*p == ' ' || *p == '\t') p++;
     while (*p >= '0' && *p <= '9') {
         vmData = vmData * 10 + *p - '0';
@@ -84,6 +85,18 @@ ull get_process_memory(pid_t pid) {
     return (vmData + vmStk) * 1024;
 }
 
+void read_stdout(int *pipe_stdout_read) {
+    char buf[1024] = { 0 };
+    while (1) {
+        int size = read(*pipe_stdout_read, buf, sizeof(buf));
+        if (size > 0) {
+            append(buf, size);
+        } else {
+            break;
+        }
+    }
+}
+
 int main(int argc, char **args) {
     if (argc < 2) {
         printf("%s", "[Usage] shell <command> ...args ##");
@@ -97,6 +110,9 @@ int main(int argc, char **args) {
         printf("%s", "Falied to create pipe to slave ##");
         return 0;
     }
+
+    // alarm self, ensure that the program will not run forever
+    alarm(MAX_TIME + 1);
 
     int pipe_stdout_read = pipes[0];
     int pipe_stdout_write = pipes[1];
@@ -123,9 +139,11 @@ int main(int argc, char **args) {
         //redirect stdout
         //stdin will be read to child process, but stdout will be hijack
         dup2(pipe_stdout_write, STDOUT_FILENO);
+        dup2(pipe_stdout_write, STDERR_FILENO);
 
         ptrace(PTRACE_TRACEME, NULL, NULL);
         raise(SIGSTOP);
+
         //execute command
         execvp(args[1], args + 1);
     } else {
@@ -142,6 +160,11 @@ int main(int argc, char **args) {
         struct timeval tv;
         gettimeofday(&tv, NULL);
         start_time = tv.tv_sec * 1000000 + tv.tv_usec;
+
+        // create thread to read stdout
+        pthread_t thread;
+        pthread_create(&thread, NULL, (void *)read_stdout, &pipe_stdout_read);
+
         while(1) {
             //capture syscall
             ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
@@ -195,14 +218,15 @@ int main(int argc, char **args) {
                 ptrace(PTRACE_SETREGS, pid, NULL, &regs);
                 kill(pid, SIGKILL);
             }
-            //block ls
-            if(syscall == SYS_getdents || syscall == SYS_getdents64) {
-                regs.rax = -1;
-                ptrace(PTRACE_SETREGS, pid, NULL, &regs);
-                kill(pid, SIGKILL);
-            }
+            // allow, but not allow to read, python need to list dir and read file
+            // if(syscall == SYS_getdents || syscall == SYS_getdents64) {
+            //     regs.rax = -1;
+            //     ptrace(PTRACE_SETREGS, pid, NULL, &regs);
+            //     printf("cccc");
+            //     kill(pid, SIGKILL);
+            // }
             //block getuid setuid and so on
-            if(syscall == SYS_getuid || syscall == SYS_setuid || syscall == SYS_geteuid || syscall == SYS_getgid || syscall == SYS_setgid || syscall == SYS_getegid) {
+            if(syscall == SYS_setuid || syscall == SYS_setgid) {
                 regs.rax = -1;
                 ptrace(PTRACE_SETREGS, pid, NULL, &regs);
                 kill(pid, SIGKILL);
@@ -219,39 +243,20 @@ int main(int argc, char **args) {
                 ptrace(PTRACE_SETREGS, pid, NULL, &regs);
                 kill(pid, SIGKILL);
             }
-
-            //get output
-            if(syscall == SYS_write) {
-                //child process has been blocked
-                ptrace(PTRACE_SYSCALL, pid, NULL, NULL);
-                if (regs.rdi == 1 || regs.rdi == 2) {
-                    //read from stdout
-                    int length = regs.rdx;
-                    char *buf = malloc(length);
-                    int read_length = 0;
-                    while (read_length < length) {
-                        int n = read(pipe_stdout_read, buf + read_length, length - read_length);
-                        if (n == -1) {
-                            break;
-                        }
-                        read_length += n;
-                    }
-                    append(buf, length);
-                }
-            }
             //capture syscall which will allocate memory
             if(syscall == SYS_brk || syscall == SYS_mmap || syscall == SYS_mremap || syscall == SYS_munmap || syscall == SYS_mprotect) {
                 //get current memory usage
                 execute_memory = max(execute_memory, get_process_memory(pid));
                 if (execute_memory > MAX_MEMORY) {
                     kill(pid, SIGKILL);
-                    break;
                 }
             }
         }
 
         //process exit
         waitpid(pid, &status, 0);
+        //wait thread exit
+        pthread_join(thread, NULL);
         //get nano time
         gettimeofday(&tv, NULL);
         end_time = tv.tv_sec * 1000000 + tv.tv_usec;

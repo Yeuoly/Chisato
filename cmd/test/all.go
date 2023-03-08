@@ -5,30 +5,12 @@ import (
 	"fmt"
 	"io"
 	"net"
-	"sync"
-	"time"
 
 	"github.com/Yeuoly/Chisato/chisato"
 	"github.com/aceld/zinx/znet"
 )
 
 func main() {
-	mu := sync.RWMutex{}
-	i := 0
-	start_time := time.Now().Unix()
-	//speed := 0.0
-	c := time.Tick(time.Second)
-	go func() {
-		last_i := 0
-		for range c {
-			mu.RLock()
-			current_i := i
-			mu.RUnlock()
-			fmt.Printf("current speed %f i/s, average speed: %f\n", float64(current_i-last_i)/1.0, float64(current_i)/float64(time.Now().Unix()-start_time))
-			last_i = current_i
-		}
-	}()
-
 	type testcase struct {
 		Code     string
 		Language string
@@ -47,20 +29,7 @@ int main() {
 }
 			`,
 			Language: "c",
-			Cases: []chisato.ChisatoTestcase{
-				{
-					Stdin:  "2,4",
-					Stdout: "6",
-				},
-				{
-					Stdin:  "11,11",
-					Stdout: "22",
-				},
-				{
-					Stdin:  "1111,22222",
-					Stdout: "23333",
-				},
-			},
+			Cases:    nil,
 		},
 		//testcase for cpp
 		{
@@ -76,31 +45,65 @@ int main() {
 	return 0;
 }			`,
 			Language: "cpp",
-			Cases: []chisato.ChisatoTestcase{
-				{
-					Stdin:  "2,4",
-					Stdout: "6",
-				},
-				{
-					Stdin:  "11,11",
-					Stdout: "22",
-				},
-				{
-					Stdin:  "1111,22222",
-					Stdout: "23333",
-				},
-			},
+			Cases:    nil,
+		},
+		//testcase for python
+		{
+			Code: `
+a, b = map(int, input().split(','))
+print(a + b)
+			`,
+			Language: "python3",
+			Cases:    nil,
+		},
+		{
+			Code: `
+a, b = map(int, raw_input().split(','))
+print(a + b)
+			`,
+			Language: "python2",
+			Cases:    nil,
+		},
+		//testcase for java
+		{
+			Code: `
+package cn.srmxy.chisato.main;
+public class Main {
+	public static void main(String[] args) {
+		java.util.Scanner scanner = new java.util.Scanner(System.in);
+		String line = scanner.nextLine();
+		String[] arr = line.split(",");
+		int a = Integer.parseInt(arr[0]);
+		int b = Integer.parseInt(arr[1]);
+		System.out.println(a + b);
+	}
+}
+					`,
+			Language: "java",
+			Cases:    nil,
+		},
+		//testcase for go
+		{
+			Code: `
+package main
+import "fmt"
+func main() {
+	var a, b int
+	fmt.Scanf("%d,%d", &a, &b)
+	fmt.Println(a + b)
+}
+			`,
+			Language: "go",
+			Cases:    nil,
 		},
 	}
 
-	for k := 0; k < 1; k++ {
+	for i, v := range testcases {
+		v := v
+		i := i
 		go func() {
 			for {
-				mu.Lock()
-				i++
-				current := i
-				mu.Unlock()
-				test(current, testcases[current%len(testcases)].Code, testcases[current%len(testcases)].Language)
+				test(i, v.Code, v.Language)
 			}
 		}()
 	}
@@ -128,7 +131,7 @@ func test(id int, code string, language string) {
 		Language: language,
 	}
 
-	conn, err := net.Dial("tcp", "localhost:7171")
+	conn, err := net.Dial("tcp", "localhost:7172")
 	if err != nil {
 		panic(err)
 	}

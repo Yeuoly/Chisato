@@ -57,11 +57,13 @@ func init() {
 
 		//how to add --cap-add=SYS_PTRACE?
 		resp, err := cli.ContainerCreate(context.Background(), &container.Config{
-			Image: "yeuoly/chisato:v1",
-			Tty:   true,
-			Cmd:   []string{"/bin/bash"},
+			Image:           "yeuoly/chisato:v1",
+			Tty:             true,
+			Cmd:             []string{"/bin/bash"},
+			NetworkDisabled: true,
 		}, &container.HostConfig{
-			CapAdd: []string{"SYS_PTRACE"},
+			CapAdd:      []string{"SYS_PTRACE"},
+			NetworkMode: "none", //disable network access to prevent network attack
 		}, nil, nil, "chisato")
 
 		if err != nil {
@@ -77,8 +79,9 @@ func init() {
 
 	//compile shell/shell.c and copy it to docker
 	fmt.Println("compiling docker runner master to -> shell/shell")
-	cmd := exec.Command("bash", "-c", "gcc ./shell/shell.c -o ./shell/shell")
+	cmd := exec.Command("bash", "-c", "gcc -lpthread ./shell/shell.c -o ./shell/shell")
 	cmd.Run()
+	cmd.Wait()
 	fmt.Println("copying docker runner master to docker -> /home/ctf/shell")
 	DockerCopyFileFromLocal("./shell/shell", "/home/ctf/shell")
 }
@@ -166,6 +169,71 @@ func DockerRunElf(elf_path string, stdin string, args ...string) (result string,
 		AttachStdout: true,
 		AttachStderr: true,
 		User:         "ctf",
+	}
+
+	resp, err := cli.ContainerExecCreate(context.Background(), global_chisato_id, exec_config)
+	if err != nil {
+		return "", err
+	}
+
+	hijack, err := cli.ContainerExecAttach(context.Background(), resp.ID, types.ExecStartCheck{})
+	if err != nil {
+		return "", err
+	}
+	//set timeout
+	hijack.Conn.SetDeadline(time.Now().Add(time.Minute))
+
+	//write stdin
+	go func() {
+		defer hijack.CloseWrite()
+		hijack.Conn.Write([]byte(stdin))
+	}()
+
+	//read
+	result = ""
+	last := make([]byte, 0)
+	for {
+		//check if last is already contain a complete output
+		if len(last) >= 8 {
+			//read length
+			length := binary.BigEndian.Uint32(last[4:8])
+			if len(last) >= 8+int(length) {
+				result += string(last[8 : 8+length])
+				last = last[8+length:]
+				continue
+			}
+		}
+
+		buf := make([]byte, 1024)
+		n, err := hijack.Conn.Read(buf)
+		if err != nil {
+			break
+		}
+		//append buf to last
+		if len(last) == 0 {
+			last = buf[:n]
+		} else {
+			last = append(last, buf[:n]...)
+		}
+	}
+	return
+}
+
+func DockerRunNativeElfWithWorkdir(elf_path string, stdin string, workdir string, args ...string) (result string, err error) {
+	cli, err := client.NewClientWithOpts(client.FromEnv)
+	if err != nil {
+		panic(err)
+	}
+	//run command in container
+	// /home/ctf/shell elf_path args
+	args = append([]string{"/home/ctf/shell", elf_path}, args...)
+	exec_config := types.ExecConfig{
+		Cmd:          args,
+		AttachStdin:  true,
+		AttachStdout: true,
+		AttachStderr: true,
+		User:         "ctf",
+		WorkingDir:   workdir,
 	}
 
 	resp, err := cli.ContainerExecCreate(context.Background(), global_chisato_id, exec_config)

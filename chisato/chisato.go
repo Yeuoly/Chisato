@@ -119,7 +119,7 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 
 	//create tmp path
 	tmp_path = "./tmp/" + strconv.FormatInt(time.Now().UnixMilli(), 16)
-	tmp_path += strconv.FormatInt(time.Hour.Nanoseconds(), 16)
+	tmp_path += strconv.FormatInt(time.Now().UnixNano(), 16)
 
 	//test language
 	switch request.Language {
@@ -166,6 +166,26 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 			return execute_time, execute_memory, result, result == stdout
 		})
 	case "go":
+		//compile
+		exec_path, err = CompileGolang(tmp_path, request.Code)
+		if err != nil {
+			return failed(err.Error())
+		}
+		//copy file to docker
+		docker_path := docker_work_dir + exec_path
+		docker_path = path.Clean(docker_path)
+		err = DockerCopyFileFromLocal(exec_path, docker_path)
+		if err != nil {
+			return failed(err.Error())
+		}
+		//run
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, uint64, string, bool) {
+			execute_time, execute_memory, result, err := RunGolang(docker_path, stdin)
+			if err != nil {
+				return 0, 0, err.Error(), false
+			}
+			return execute_time, execute_memory, result, result == stdout
+		})
 	case "python2":
 		exec_path, err := CompilePython2(tmp_path, request.Code)
 		if err != nil {
@@ -207,6 +227,25 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 			return execute_time, execute_memory, result, result == stdout
 		})
 	case "java":
+		exec_path, err := CompileJava(tmp_path, request.Code)
+		if err != nil {
+			return failed(err.Error())
+		}
+		//copy file to docker
+		docker_path := docker_work_dir + exec_path
+		docker_path = path.Clean(docker_path)
+		err = DockerCopyFileFromLocal(exec_path, docker_path)
+		if err != nil {
+			return failed(err.Error())
+		}
+		//run
+		testcase_result = RunTesting(request.Testcase, func(stdin string, stdout string) (uint64, uint64, string, bool) {
+			execute_time, execute_memory, result, err := RunJava(docker_path, stdin)
+			if err != nil {
+				return 0, 0, err.Error(), false
+			}
+			return execute_time, execute_memory, result, result == stdout
+		})
 	case "node":
 	}
 

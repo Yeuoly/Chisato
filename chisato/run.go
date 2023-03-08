@@ -9,9 +9,10 @@ var work_path string = "/home/ctf/"
 
 func parseResult(result string) (uint64, uint64, string, error) {
 	//result has a header total 8*4 bytes
-	if len(result) <= 0x20 {
+	if len(result) < 0x20 {
 		return 0, 0, "", errors.New("runner master returns a error format output")
 	}
+
 	//read header
 	header_bytes := []byte(result[:0x20])
 	execute_time := binary.LittleEndian.Uint64(header_bytes[0:8])
@@ -54,6 +55,15 @@ func RunCpp(exec_path string, stdin string) (uint64, uint64, string, error) {
 	return parseResult(out)
 }
 
+func RunGolang(exec_path string, stdin string) (uint64, uint64, string, error) {
+	//run docker container
+	out, err := DockerRunElf(exec_path, stdin)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	return parseResult(out)
+}
+
 func RunPython2(exec_path string, stdin string) (uint64, uint64, string, error) {
 	//run docker container
 	out, err := DockerRunElf("python2", stdin, exec_path)
@@ -66,6 +76,16 @@ func RunPython2(exec_path string, stdin string) (uint64, uint64, string, error) 
 func RunPython3(exec_path string, stdin string) (uint64, uint64, string, error) {
 	//run docker container
 	out, err := DockerRunElf("python3", stdin, exec_path)
+	if err != nil {
+		return 0, 0, "", err
+	}
+	return parseResult(out)
+}
+
+func RunJava(exec_path string, stdin string) (uint64, uint64, string, error) {
+	//run docker container
+	out, err := DockerRunNativeElfWithWorkdir("java", stdin, exec_path, JAVA_DEFAULT_PACKAGE+"."+JAVA_DEFAULT_CLASS)
+
 	if err != nil {
 		return 0, 0, "", err
 	}
