@@ -62,9 +62,14 @@ const (
 	MESSAGEID_CONFIG  = 1
 	MESSAGEID_TESTING = 2
 	MESSAGEID_ADMIN   = 3
+	MESSAGEID_PING    = 4
 )
 
 type ChisatoTestingServer struct {
+	znet.BaseRouter
+}
+
+type ChisatoPingServer struct {
 	znet.BaseRouter
 }
 
@@ -74,6 +79,7 @@ var docker_work_dir = "/home/ctf/"
 func (root Chisato) Run() {
 	server := znet.NewServer()
 	server.AddRouter(MESSAGEID_TESTING, &ChisatoTestingServer{})
+	server.AddRouter(MESSAGEID_PING, &ChisatoPingServer{})
 	server.Serve()
 }
 
@@ -93,6 +99,10 @@ func (router *ChisatoTestingServer) Handle(req ziface.IRequest) {
 	//marshal
 	text, _ := json.Marshal(response)
 	req.GetConnection().SendBuffMsg(MESSAGEID_TESTING, text)
+}
+
+func (router *ChisatoPingServer) Handle(req ziface.IRequest) {
+	req.GetConnection().SendBuffMsg(MESSAGEID_PING, []byte("pong"))
 }
 
 func RunTesting(testcase []ChisatoTestcase, callback func(string, string) (uint64, uint64, string, bool)) []ChisatoTestcaseResult {
