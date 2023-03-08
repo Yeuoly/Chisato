@@ -175,7 +175,7 @@ func (root Chisato) Testing(request ChisatoRequestTesting) ChisatoResponse {
 			}
 			return execute_time, execute_memory, result, result == stdout
 		})
-	case "go":
+	case "golang":
 		//compile
 		exec_path, err = CompileGolang(tmp_path, request.Code)
 		if err != nil {
