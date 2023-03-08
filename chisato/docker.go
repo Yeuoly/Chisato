@@ -79,7 +79,7 @@ func init() {
 
 	//compile shell/shell.c and copy it to docker
 	fmt.Println("compiling docker runner master to -> shell/shell")
-	cmd := exec.Command("bash", "-c", "gcc -lpthread ./shell/shell.c -o ./shell/shell")
+	cmd := exec.Command("bash", "-c", "gcc -pthread ./shell/shell.c -o ./shell/shell")
 	cmd.Run()
 	cmd.Wait()
 	fmt.Println("copying docker runner master to docker -> /home/ctf/shell")
